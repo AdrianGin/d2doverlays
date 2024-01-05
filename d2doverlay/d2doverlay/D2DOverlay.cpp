@@ -43,7 +43,7 @@ D2DOverlay::~D2DOverlay()
 // Creates the application window and initializes
 // device-independent resources.
 //
-HRESULT D2DOverlay::Initialize(HWND* hwnd, bool isTransparent)
+HRESULT D2DOverlay::Initialize(bool isTransparent)
 {
 	HRESULT hr = S_OK;
 	// Initialize device-indpendent resources, such
@@ -63,8 +63,8 @@ HRESULT D2DOverlay::Initialize(HWND* hwnd, bool isTransparent)
 	RegisterClassEx(&wcex);
 
 	// Create the application window.
-	CreateHwnd(hwnd, isTransparent);
-	*hwnd = m_hwnd;
+	CreateHwnd(&m_hwnd, isTransparent);
+	//*hwnd = m_hwnd;
 
 	//CreateD3D11Device();
 	//CreateDCompositionDevice();
@@ -85,8 +85,18 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 	int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
 
+	int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+	int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+	int windowWidth = 400;
+	int windowHeight = 300;
+
+	// Calculate window position
+	int x = (screenWidth - windowWidth) / 2;
+	int y = (screenHeight - windowHeight) / 2;
+
 	//WS_EX_TOOLWINDOW WS_EX_TOPMOST WS_EX_TOOLWINDOW // WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW
-	DWORD flags = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW;
+	DWORD flags = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP;
 	if (isTransparent) {
 		flags |= WS_EX_TRANSPARENT;
 	}
@@ -95,12 +105,12 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 	m_hwnd = CreateWindowEx(
 		flags,
 		L"Direct2dWindow",
-		L"Swiftpoint Overlay",
-		WS_POPUP,
-		left,
-		top,
-		w,
-		h,
+		L"Overlay",
+		WS_OVERLAPPED,
+		x,
+		y,
+		windowWidth,
+		windowHeight,
 		NULL,				  // Parent window 
 		NULL,						 // Menu
 		HINST_THISCOMPONENT,  // Instance handle
@@ -108,7 +118,185 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 	);
 
 	//Make no top border. WS_CHILD  WS_OVERLAPPED
-	SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_CHILD);
+	//SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_OVERLAPPED);
 
-	//ShowWindow(m_hwnd, SW_NORMAL);
+	ShowWindow(m_hwnd, SW_NORMAL);
+}
+
+
+
+//
+// The window message handler.
+//
+LRESULT CALLBACK D2DOverlay::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	LRESULT result = 0;
+
+	if (message == WM_CREATE)
+	{
+		LPCREATESTRUCT pcs = (LPCREATESTRUCT)lParam;
+		D2DOverlay* pDirect2dWindow = (D2DOverlay*)pcs->lpCreateParams;
+
+		::SetWindowLongPtr(
+			hwnd,
+			GWLP_USERDATA,
+			(LONG_PTR)(pDirect2dWindow)
+		);
+
+		return 0;
+	}
+	else
+	{
+		D2DOverlay* pDirect2dWindow = reinterpret_cast<D2DOverlay*>(static_cast<LONG_PTR>(
+			::GetWindowLongPtr(
+				hwnd,
+				GWLP_USERDATA
+			)));
+
+		bool wasHandled = false;
+
+		if (pDirect2dWindow)
+		{
+			switch (message)
+			{
+
+
+			case WM_SIZE:
+			{
+				UINT width = LOWORD(lParam);
+				UINT height = HIWORD(lParam);
+
+
+				//if (pDirect2dWindow->m_pSwapChain)
+				{
+					//pDirect2dWindow->ResizeWindow();
+					//pDirect2dWindow->Destroy();
+					//pDirect2dWindow->ReCreate();
+					//pDirect2dWindow->ResizeWindow();
+					//pDirect2dWindow->CreateDCompositionVisualTree();
+					//pDirect2dWindow->OnResize(width, height);
+				}
+
+			}
+			result = 0;
+			wasHandled = true;
+			break;
+
+			case WM_PAINT:
+			{
+				PAINTSTRUCT ps;
+				BeginPaint(hwnd, &ps);
+				//pDirect2dWindow->OnRenderComposite();
+				EndPaint(hwnd, &ps);
+
+				//SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
+			}
+			result = 0;
+			wasHandled = true;
+			break;
+
+
+			case WM_DESTROY:
+			{
+				//pDirect2dWindow->Destroy();
+			}
+			result = 1;
+			wasHandled = true;
+			break;
+
+			case WM_USER:
+			{
+				if (wParam == WM_KEYDOWN) {
+					KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
+					//LOG_INFO("WM_USER %d\n", kb->vkCode);
+					//pDirect2dWindow->m_isActive = !pDirect2dWindow->m_isActive;
+					InvalidateRgn(hwnd, 0, 0);
+					UpdateWindow(hwnd);
+				}
+				break;
+			}
+
+			case WM_KEYDOWN:
+				//LOG_INFO("KEY %lc\n", wParam);
+				break;
+
+			case WM_CHAR:
+				//LOG_INFO("WM_CHAR %lc\n", wParam);
+				//pDirect2dWindow->m_output->HandleKeyboardPress(wParam);
+				break;
+
+			case WM_LBUTTONUP:
+			case WM_LBUTTONDOWN:
+				if (wParam & MK_LBUTTON) {
+					//pDirect2dWindow->m_output->ProcessNewMouseClick(IMouseProcessor::eLeftButton, 1);
+				}
+				else
+				{
+					//pDirect2dWindow->m_output->ProcessNewMouseClick(IMouseProcessor::eLeftButton, 0);
+				}
+				break;
+
+			case WM_RBUTTONUP:
+			case WM_RBUTTONDOWN:
+				if (wParam & MK_RBUTTON) {
+					//pDirect2dWindow->m_output->ProcessNewMouseClick(IMouseProcessor::eRightButton, 1);
+				}
+				else
+				{
+					//pDirect2dWindow->m_output->ProcessNewMouseClick(IMouseProcessor::eRightButton, 0);
+				}
+				break;
+
+
+			case WM_MOUSEMOVE:
+			{
+
+			}
+			break;
+
+			case WM_DPICHANGED:
+			{
+				WORD g_dpi = HIWORD(wParam);
+				//LOG_INFO("WM_DPICHANGED %d\n", g_dpi);
+				break;
+			}
+
+			case WM_DISPLAYCHANGE:
+			{
+				//LOG_INFO("WM_DISPLAYCHANGE %d x %d\n", HIWORD(lParam), LOWORD(lParam));
+				//pDirect2dWindow->ResizeWindow();
+				break;
+			}
+
+
+
+			}
+		}
+
+		if (!wasHandled)
+		{
+			result = DefWindowProc(hwnd, message, wParam, lParam);
+		}
+	}
+
+	return result;
+}
+
+
+//
+// The main window message loop.
+//
+void D2DOverlay::RunMessageLoop()
+{
+	MSG msg;
+
+	while (GetMessage(&msg, m_hwnd, 0, 0))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+
+		if (msg.message == WM_DESTROY) {
+			break;
+		}
+	}
 }

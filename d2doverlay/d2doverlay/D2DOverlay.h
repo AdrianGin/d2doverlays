@@ -81,9 +81,21 @@ public:
 	D2DOverlay(float renderScale, HWND parent = NULL);
 	~D2DOverlay();
 
-	HRESULT D2DOverlay::Initialize(HWND* hwnd, bool isTransparent);
+	HRESULT Initialize(bool isTransparent);
+
+	static LRESULT CALLBACK WndProc(
+		HWND hWnd,
+		UINT message,
+		WPARAM wParam,
+		LPARAM lParam
+	);
+
+	void RunMessageLoop();
 
 private:
+	void CreateHwnd(HWND* hwnd, bool isTransparent);
+
+
 	HWND m_hwnd;
 	HWND m_parent;
 	ID2D1Factory* m_pD2DFactory;
