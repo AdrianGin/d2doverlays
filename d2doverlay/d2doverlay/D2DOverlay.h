@@ -41,6 +41,8 @@
 #include <d3d11_2.h>
 #include <atlcomcli.h>
 
+#include "Renderer.h"
+
 
 /******************************************************************
 *                                                                 *
@@ -95,6 +97,9 @@ public:
 private:
 	void CreateHwnd(HWND* hwnd, bool isTransparent);
 
+	HRESULT CreateD3D11Device();
+
+	HRESULT OnRenderComposite();
 
 	HWND m_hwnd;
 	HWND m_parent;
@@ -110,6 +115,15 @@ private:
 	ID2D1BitmapBrush* m_pGridPatternBitmapBrush;
 	ID2D1Bitmap* m_pBitmap;
 	ID2D1Bitmap* m_pAnotherBitmap;
+
+	Microsoft::WRL::ComPtr<ID3D11Device> m_d3d11Device;
+	Microsoft::WRL::ComPtr <ID3D11DeviceContext> m_d3d11Context;
+	Microsoft::WRL::ComPtr<IDXGISwapChain2> m_pSwapChain;
+
+	Microsoft::WRL::ComPtr<IDCompositionDevice> m_pDevice;
+	Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_dc;
+
+	Renderer renderer;
 
 	float m_renderScale;
 };

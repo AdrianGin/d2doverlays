@@ -1,6 +1,15 @@
 #include "stdafx.h"
 #include "D2DOverlay.h"
+using namespace Microsoft::WRL;
 
+
+void HR(HRESULT const result)
+{
+	if (S_OK != result)
+	{
+		
+	}
+}
 
 D2DOverlay::D2DOverlay(float renderScale, HWND parent) :
 	m_hwnd(NULL),
@@ -66,7 +75,7 @@ HRESULT D2DOverlay::Initialize(bool isTransparent)
 	CreateHwnd(&m_hwnd, isTransparent);
 	//*hwnd = m_hwnd;
 
-	//CreateD3D11Device();
+	CreateD3D11Device();
 	//CreateDCompositionDevice();
 	//CreateDCompositionRenderTarget();
 	//CreateDResources();
@@ -96,7 +105,7 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 	int y = (screenHeight - windowHeight) / 2;
 
 	//WS_EX_TOOLWINDOW WS_EX_TOPMOST WS_EX_TOOLWINDOW // WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW
-	DWORD flags = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP;
+	DWORD flags = 0;// = WS_EX_OVERLAPPEDWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP;
 	if (isTransparent) {
 		flags |= WS_EX_TRANSPARENT;
 	}
@@ -106,7 +115,7 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 		flags,
 		L"Direct2dWindow",
 		L"Overlay",
-		WS_OVERLAPPED,
+		WS_POPUP,
 		x,
 		y,
 		windowWidth,
@@ -186,7 +195,7 @@ LRESULT CALLBACK D2DOverlay::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
 			{
 				PAINTSTRUCT ps;
 				BeginPaint(hwnd, &ps);
-				//pDirect2dWindow->OnRenderComposite();
+				pDirect2dWindow->OnRenderComposite();
 				EndPaint(hwnd, &ps);
 
 				//SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
@@ -198,6 +207,7 @@ LRESULT CALLBACK D2DOverlay::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
 
 			case WM_DESTROY:
 			{
+				PostQuitMessage(0);
 				//pDirect2dWindow->Destroy();
 			}
 			result = 1;
@@ -290,7 +300,7 @@ void D2DOverlay::RunMessageLoop()
 {
 	MSG msg;
 
-	while (GetMessage(&msg, m_hwnd, 0, 0))
+	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
@@ -298,5 +308,103 @@ void D2DOverlay::RunMessageLoop()
 		if (msg.message == WM_DESTROY) {
 			break;
 		}
+
+		if (msg.message == WM_QUIT) {
+			break;
+		}
 	}
+}
+
+
+HRESULT D2DOverlay::OnRenderComposite()
+{
+	HRESULT hr = ((m_pDevice == nullptr) || (m_hwnd == NULL)) ? E_UNEXPECTED : S_OK;
+	if (hr != S_OK) {
+		return S_OK;
+	}
+
+	bool redraw = renderer.Render(m_dc);
+	if (redraw) {
+		m_pSwapChain->Present(0, 0); // flags
+		HR(m_pDevice->Commit());
+	}
+	return S_OK;
+}
+
+
+
+
+HRESULT D2DOverlay::CreateD3D11Device()
+{
+	HRESULT hr = S_OK;
+
+	D3D_DRIVER_TYPE driverTypes[] =
+	{
+		D3D_DRIVER_TYPE_HARDWARE,
+	};
+
+	D3D_FEATURE_LEVEL featureLevelSupported;
+
+	//for (int i = 0; i < sizeof(driverTypes) / sizeof(driverTypes[0]); ++i)
+	{
+		CComPtr<ID3D11DeviceContext> d3d11DeviceContext;
+
+		HR(D3D11CreateDevice(
+			nullptr,
+			D3D_DRIVER_TYPE_HARDWARE,
+			NULL,
+			//D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_DEBUG,
+			D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+			NULL,
+			0,
+			D3D11_SDK_VERSION,
+			m_d3d11Device.ReleaseAndGetAddressOf(),
+			nullptr,
+			m_d3d11Context.ReleaseAndGetAddressOf()));
+
+
+		ComPtr<IDXGIDevice> dxgiDevice;
+		HR(m_d3d11Device->QueryInterface(dxgiDevice.GetAddressOf()));
+
+		ComPtr<IDXGIFactory2> dxFactory;
+#ifdef DEBUG
+		HR(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, __uuidof(dxFactory), (void**)dxFactory.GetAddressOf()));
+#else
+		HR(CreateDXGIFactory2(0, __uuidof(dxFactory), (void**)dxFactory.GetAddressOf()));
+#endif
+		DXGI_SWAP_CHAIN_DESC1 description = {};
+		description.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+		description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		description.BufferCount = 2;
+		description.SampleDesc.Count = 1;
+		description.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+		description.Scaling = DXGI_SCALING_STRETCH;
+		description.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+
+		RECT rect = {};
+		GetWindowRect(m_hwnd, &rect);
+		description.Width = rect.right - rect.left;
+		description.Height = rect.bottom - rect.top;
+
+		description.Width *= m_renderScale;
+		description.Height *= m_renderScale;
+
+		HR(dxFactory->CreateSwapChainForComposition(dxgiDevice.Get(),
+			&description,
+			nullptr, // Don’t restrict
+			(IDXGISwapChain1**)m_pSwapChain.ReleaseAndGetAddressOf()));
+
+		m_pSwapChain->SetSourceSize(
+			description.Width,
+			description.Height
+		);
+
+		DXGI_MATRIX_3X2_F inverseScale = { 0 };
+		inverseScale._11 = 1.0f / m_renderScale;
+		inverseScale._22 = 1.0f / m_renderScale;
+
+		HR(m_pSwapChain->SetMatrixTransform(&inverseScale));
+	}
+	return hr;
 }
