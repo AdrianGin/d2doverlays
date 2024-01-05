@@ -100,6 +100,10 @@ private:
 	HRESULT CreateD3D11Device();
 
 	HRESULT OnRenderComposite();
+	HRESULT CreateDCompositionDevice();
+	HRESULT CreateDCompositionRenderTarget();
+	HRESULT CreateDCompositionVisualTree();
+	HRESULT CreateDResources();
 
 	HWND m_hwnd;
 	HWND m_parent;
@@ -119,9 +123,21 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11Device> m_d3d11Device;
 	Microsoft::WRL::ComPtr <ID3D11DeviceContext> m_d3d11Context;
 	Microsoft::WRL::ComPtr<IDXGISwapChain2> m_pSwapChain;
+	Microsoft::WRL::ComPtr<IDCompositionTarget> m_pHwndRenderTarget;
 
 	Microsoft::WRL::ComPtr<IDCompositionDevice> m_pDevice;
 	Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_dc;
+
+	Microsoft::WRL::ComPtr<IDXGIDevice> m_dxgiDevice;
+	Microsoft::WRL::ComPtr<ID2D1Factory2> m_d2Factory;
+	Microsoft::WRL::ComPtr<ID2D1Device1> m_d2Device;
+	Microsoft::WRL::ComPtr<IDXGISurface2> m_surface;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_bitmap;
+	Microsoft::WRL::ComPtr<IDWriteFactory> m_IDWriteFactory;
+
+	Microsoft::WRL::ComPtr<IDCompositionVisual> m_pRootVisual;
+	Microsoft::WRL::ComPtr<IDCompositionVisual> m_pBackground;
+	Microsoft::WRL::ComPtr<IDCompositionVisual> m_pSpotlight;
 
 	Renderer renderer;
 

@@ -19,7 +19,7 @@ int WINAPI WinMain(
         {
             D2DOverlay app(1.0, NULL);
 
-            if (SUCCEEDED(app.Initialize(false)))
+            if (SUCCEEDED(app.Initialize(true)))
             {
                 app.RunMessageLoop();
             }

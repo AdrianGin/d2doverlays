@@ -76,11 +76,13 @@ HRESULT D2DOverlay::Initialize(bool isTransparent)
 	//*hwnd = m_hwnd;
 
 	CreateD3D11Device();
-	//CreateDCompositionDevice();
-	//CreateDCompositionRenderTarget();
-	//CreateDResources();
-	//CreateDCompositionVisualTree();
+	CreateDCompositionDevice();
+	CreateDCompositionRenderTarget();
+	CreateDResources();
+	CreateDCompositionVisualTree();
 	//CreateTransforms();
+
+	InvalidateRgn(m_hwnd, 0, 0);
 
 	return hr;
 }
@@ -88,12 +90,6 @@ HRESULT D2DOverlay::Initialize(bool isTransparent)
 
 void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 {
-	int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-	int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-	int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-	int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-
 	int screenWidth = GetSystemMetrics(SM_CXSCREEN);
 	int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
@@ -105,7 +101,7 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 	int y = (screenHeight - windowHeight) / 2;
 
 	//WS_EX_TOOLWINDOW WS_EX_TOPMOST WS_EX_TOOLWINDOW // WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW
-	DWORD flags = 0;// = WS_EX_OVERLAPPEDWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP;
+	DWORD flags = WS_EX_OVERLAPPEDWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP;
 	if (isTransparent) {
 		flags |= WS_EX_TRANSPARENT;
 	}
@@ -127,7 +123,7 @@ void D2DOverlay::CreateHwnd(HWND* hwnd, bool isTransparent)
 	);
 
 	//Make no top border. WS_CHILD  WS_OVERLAPPED
-	//SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_OVERLAPPED);
+	SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_OVERLAPPED);
 
 	ShowWindow(m_hwnd, SW_NORMAL);
 }
@@ -328,6 +324,7 @@ HRESULT D2DOverlay::OnRenderComposite()
 		m_pSwapChain->Present(0, 0); // flags
 		HR(m_pDevice->Commit());
 	}
+
 	return S_OK;
 }
 
@@ -407,4 +404,82 @@ HRESULT D2DOverlay::CreateD3D11Device()
 		HR(m_pSwapChain->SetMatrixTransform(&inverseScale));
 	}
 	return hr;
+}
+
+HRESULT D2DOverlay::CreateDCompositionDevice()
+{
+	HRESULT hr = (m_d3d11Device == nullptr) ? E_UNEXPECTED : S_OK;
+	ComPtr<IDXGIDevice> dxgiDevice;
+	HR(m_d3d11Device->QueryInterface(dxgiDevice.GetAddressOf()));
+	HR(DCompositionCreateDevice(dxgiDevice.Get(), __uuidof(IDCompositionDevice), reinterpret_cast<void**>(m_pDevice.ReleaseAndGetAddressOf())));
+	return hr;
+}
+
+HRESULT D2DOverlay::CreateDCompositionRenderTarget()
+{
+	HRESULT hr = ((m_pDevice == nullptr) || (m_hwnd == NULL)) ? E_UNEXPECTED : S_OK;
+	HR(m_pDevice->CreateTargetForHwnd(m_hwnd, TRUE, m_pHwndRenderTarget.ReleaseAndGetAddressOf()));
+
+	return hr;
+}
+
+
+HRESULT D2DOverlay::CreateDCompositionVisualTree()
+{
+
+	OnRenderComposite();
+
+	// Make the swap chain available to the composition engine
+	m_pSwapChain->Present(1, 0); // flags
+
+	HR(m_pDevice->CreateVisual(m_pRootVisual.ReleaseAndGetAddressOf()));
+	HR(m_pDevice->CreateVisual(m_pSpotlight.ReleaseAndGetAddressOf()));
+	HR(m_pDevice->CreateVisual(m_pBackground.ReleaseAndGetAddressOf()));
+	HR(m_pSpotlight->SetContent(m_pSwapChain.Get()));
+
+	HR(m_pHwndRenderTarget->SetRoot(m_pRootVisual.Get()));
+	HR(m_pRootVisual->AddVisual(m_pSpotlight.Get(), TRUE, NULL));
+
+
+	HR(m_pDevice->Commit());
+
+	return S_OK;
+}
+
+
+HRESULT D2DOverlay::CreateDResources()
+{
+	HR(m_d3d11Device->QueryInterface(m_dxgiDevice.ReleaseAndGetAddressOf()));
+
+	D2D1_FACTORY_OPTIONS const options = { D2D1_DEBUG_LEVEL_NONE };
+
+	// Create a single-threaded Direct2D factory with debugging information
+	HR(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, options, m_d2Factory.ReleaseAndGetAddressOf()));
+
+	HR(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_IDWriteFactory.ReleaseAndGetAddressOf())));
+
+	// Create the Direct2D device that links back to the Direct3D device
+	HR(m_d2Factory->CreateDevice(m_dxgiDevice.Get(), m_d2Device.ReleaseAndGetAddressOf()));
+
+	// Create the Direct2D device context that is the actual render target
+	// and exposes drawing commands
+	HR(m_d2Device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, m_dc.ReleaseAndGetAddressOf()));
+
+	// Retrieve the swap chain's back buffer
+	HR(m_pSwapChain->GetBuffer(0, __uuidof(m_surface), reinterpret_cast<void**>(m_surface.ReleaseAndGetAddressOf())));
+
+
+	// Create a Direct2D bitmap that points to the swap chain surface
+	D2D1_BITMAP_PROPERTIES1 properties = {};
+	properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+	properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+
+
+	HR(m_dc->CreateBitmapFromDxgiSurface(m_surface.Get(), properties, m_bitmap.ReleaseAndGetAddressOf()));
+
+	// Point the device context to the bitmap for rendering
+	m_dc->SetTarget(m_bitmap.Get());
+
+	return S_OK;
 }
