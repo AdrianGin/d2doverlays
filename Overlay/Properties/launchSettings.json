@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Overlay": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
